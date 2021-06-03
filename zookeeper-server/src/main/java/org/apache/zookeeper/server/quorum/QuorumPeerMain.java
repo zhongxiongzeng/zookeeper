@@ -126,6 +126,11 @@ public class QuorumPeerMain {
         }
 
         // Start and schedule the the purge task
+        // 开启数据管理任务，作用如下：
+        // 由于 ZooKeeper 的任何一个变更操作都产生事务，事务日志需要持久化到硬盘，同时当写操作达到一定量或者一定时间间隔后，
+        //会对内存中的数据进行一次快照并写入到硬盘上的 snapshop 中，快照为了缩短启动时加载数据的时间从而加快整个系统启动。
+        //而随着运行时间的增长生成的 transaction log 和 snapshot 将越来越多，所以要定期清理，DatadirCleanupManager
+        //就是启动一个 TimeTask 定时任务用于清理 DataDir 中的 snapshot 及对应的 transaction log
         DatadirCleanupManager purgeMgr = new DatadirCleanupManager(
             config.getDataDir(),
             config.getDataLogDir(),
@@ -134,8 +139,10 @@ public class QuorumPeerMain {
         purgeMgr.start();
 
         if (args.length == 1 && config.isDistributed()) {
+            //运行集群模式
             runFromConfig(config);
         } else {
+            // 运行单机模式
             LOG.warn("Either no config or no quorum defined in config, running in standalone mode");
             // there is only server in the quorum -- run as standalone
             ZooKeeperServerMain.main(args);
@@ -226,6 +233,8 @@ public class QuorumPeerMain {
                 quorumPeer.setJvmPauseMonitor(new JvmPauseMonitor(config));
             }
 
+
+            //开启服务
             quorumPeer.start();
             ZKAuditProvider.addZKStartStopAuditLog();
             quorumPeer.join();
