@@ -75,6 +75,7 @@ public class ZKDatabase {
      * make sure on a clear you take care of
      * all these members.
      */
+    // zookeeper数据的存储结构
     protected DataTree dataTree;
     protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
     protected FileTxnSnapLog snapLog;

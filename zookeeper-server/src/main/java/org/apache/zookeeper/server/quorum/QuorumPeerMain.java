@@ -237,6 +237,7 @@ public class QuorumPeerMain {
             //开启服务
             quorumPeer.start();
             ZKAuditProvider.addZKStartStopAuditLog();
+            // pending
             quorumPeer.join();
         } catch (InterruptedException e) {
             // warn, but generally this is ok

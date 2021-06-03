@@ -29,7 +29,7 @@ import org.apache.zookeeper.server.util.AdHash;
  * each mutation.
  */
 public class NodeHashMapImpl implements NodeHashMap {
-
+    //第一颗数，记录数据，第二棵树是dataNode里面的children,记录上下级关系
     private final ConcurrentHashMap<String, DataNode> nodes;
     private final boolean digestEnabled;
     private final DigestCalculator digestCalculator;

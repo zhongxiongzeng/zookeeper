@@ -115,6 +115,13 @@ import org.slf4j.LoggerFactory;
  * </pre>
  * <p>
  * The request for the current leader will consist solely of an xid: int xid;
+ *
+ * 服务启动流程：
+ * 1。在服务启动阶段，先进行数据恢复。
+ * 2。Leader选举
+ * 3。集群数据同步
+ * 4。开始服务
+ *
  */
 public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider {
 
@@ -1424,6 +1431,20 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     boolean shuttingDownLE = false;
 
+    /**
+     * 不停的铜鼓getPeerState方法获取当前节点的状态， 然后执行对应的逻辑
+     *
+     * 系统刚启动时serverState默认是LOOKING,表示需要进行leader选举，这时进入leader选举状态，会调用FastLeaderElection.lookForLeader方法，
+     * lookerForLeader方法内部也包含了一个循环逻辑，直到选举出leader才会跳出lookerForLeader方法,如果选举出的Leader就是本节点，
+     * 则将serverState设置成LEADING，否则设置成FOLLOWING或OBSERVING
+     *
+     * 然后QuorumPeer.run进行下一轮次的循环，通过getPeerState获取当前serverState状态，如果是Leading, 则表示当前节点为leader,
+     * 则进入leader角色分支流程，执行作为一个Leader该干的任务。
+     *
+     * 如果是FOLLOWING或OBSERVING,则进入FOLLWER或者OBSERVER角色，并执行相应的任务。
+     * 注意：进入分支路程会一直阻塞在其分支中，直到角色转变才会重新进入下一次循环，比如Follower监控到无法与leader保持通信了，
+     * 会将serverState赋值为LOOKING,跳出分支并进行下一次循环，这时就会进入LOOKING分支中重新进行leader选举
+     */
     @Override
     public void run() {
         updateThreadName();
@@ -1457,6 +1478,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             jmxQuorumBean = null;
         }
 
+        // 不停的通过getPeerState方法获取当前节点状态，然后执行相应的分支逻辑
         try {
             /*
              * Main loop

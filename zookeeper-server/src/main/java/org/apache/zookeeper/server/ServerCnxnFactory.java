@@ -37,6 +37,10 @@ import org.apache.zookeeper.server.auth.SaslServerCallbackHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 工厂类，负责管理ServerCnxn,ServerCnxn这个类代表了一个客户端与一个server的连接，每个客户端连接过来都会被封装成一个
+ * ServerCnxn实例用来维护服务器与客户端之间的连接
+ */
 public abstract class ServerCnxnFactory {
 
     public static final String ZOOKEEPER_SERVER_CNXN_FACTORY = "zookeeper.serverCnxnFactory";

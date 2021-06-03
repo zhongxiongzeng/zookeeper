@@ -96,6 +96,8 @@ import org.slf4j.LoggerFactory;
  *
  */
 
+//主要用于节点间通信，负责集群中节点的网络io,QuorumCnxManager包含一个内部listener,listener是一个线程，这里启动Listener线程，
+    //主要启动选举监听端口并处理连接进来的socket, fastLeaderElection就是封装了具体选举算法的实现
 public class QuorumCnxManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(QuorumCnxManager.class);
