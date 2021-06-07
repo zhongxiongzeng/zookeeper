@@ -918,6 +918,19 @@ public class FastLeaderElection implements Election {
      * Starts a new round of leader election. Whenever our QuorumPeer
      * changes its state to LOOKING, this method is invoked, and it
      * sends notifications to all other peers.
+     * 大致逻辑如下：
+     * 1. 更新自己期望投票信息，即当前节点期望选用哪个服务器作为Leader(用sid代替期望服务器节点)以及该服务器zxid,epoch等信息。
+     *    第一次投票都默认自己当选Leader，然后调用sendNotifications方法广播该投票到集群中所有可以参与投票服务器。
+     * 2. 只有对方发过来的投票electionEpoch和当前节点相等表示的是同一轮投票，即投票有效，然后调用totalOrderPredicate()对投票进行pk.
+     *    返回true代表对端胜出，则表示第一次投票是错误的（第一次都是投给自己），更新自己投票期望对端为Leader, 然后调用sendNotifications()
+     *    将自己最新的投票广播出去，返回false则表示自己胜出，第一次投票没有问题就不用管。
+     * 3. 如果对端发过来的election对自己，则表明重置自己的electionEpoch,然后清空之前获取到的所有投票recvset,因为之前获取的投票轮次落后
+     *    于当前则代表之前的投票已经无效了，然后调用totalOrderPredicate()将当前期望的投票和对端投票进行pk,用胜出者更新当前投票期望，然后调用
+     *    sendNotifications()将自己期望的投票广播出去。注意：不管哪一方胜出，都需要广播出去，而不是步骤2中乙方胜出不需要广播，这是因为
+     *    electionEpoch落后导致之前发出的所有投票都是无效的，所以这里需要重新发送
+     * 4. 如果对端发来的electionEpoch小于自己，则表示对方投票无效，直接忽略不处理
+     *
+     *
      */
     public Vote lookForLeader() throws InterruptedException {
         try {
@@ -934,6 +947,7 @@ public class FastLeaderElection implements Election {
              * The votes from the current leader election are stored in recvset. In other words, a vote v is in recvset
              * if v.electionEpoch == logicalclock. The current participant uses recvset to deduce on whether a majority
              * of participants has voted for it.
+             * 暂存节点的选票
              */
             Map<Long, Vote> recvset = new HashMap<Long, Vote>();
 
@@ -950,6 +964,12 @@ public class FastLeaderElection implements Election {
 
             synchronized (this) {
                 logicalclock.incrementAndGet();
+                /**
+                 * 更新本节点的数据信息，用于投票准备，该方法有三个参数：
+                 * 1、sid（节点的唯一标识）, 期望投票给哪个节点
+                 * 2、zxid（数据更新的次数，counter越大代表数据越新）, 该服务的zxid
+                 * 3、epoch(代表投票选举的轮次), 改服务的epoch
+                 */
                 updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
             }
 
@@ -957,6 +977,7 @@ public class FastLeaderElection implements Election {
                     "New election. My id = {}, proposed zxid=0x{}",
                     self.getId(),
                     Long.toHexString(proposedZxid));
+            //将消息广播出去，告诉其他节点自己不行了，要进行选举
             sendNotifications();
 
             SyncedLearnerTracker voteSet = null;
@@ -970,13 +991,16 @@ public class FastLeaderElection implements Election {
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
+                //等200ms, 看返回的消息的状态是什么
                 Notification n = recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
 
                 /*
                  * Sends more notifications if haven't received enough.
                  * Otherwise processes new notification.
+                 * 如果没有等到回来的消息就发送更多讯息
                  */
                 if (n == null) {
+                    // 检查讯息有没有发送出去，如果发送出去了，就再发一次。如果没发送出去，可能是阻塞了亦或是连接关闭了，检查连接状态
                     if (manager.haveDelivered()) {
                         sendNotifications();
                     } else {
@@ -997,6 +1021,7 @@ public class FastLeaderElection implements Election {
                      * which is in a configuration of 2 instances.
                      * */
                     self.getQuorumVerifier().revalidateVoteset(voteSet, notTimeout != minNotificationInterval);
+                    // 可能是：如果收集齐了所有的选票，直接得出结果
                     if (self.getQuorumVerifier() instanceof QuorumOracleMaj && voteSet != null && voteSet.hasAllQuorums() && notTimeout != minNotificationInterval) {
                         setPeerState(proposedLeader, voteSet);
                         Vote endVote = new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch);
@@ -1010,8 +1035,10 @@ public class FastLeaderElection implements Election {
                     /*
                      * Only proceed if the vote comes from a replica in the current or next
                      * voting view for a replica in the current or next voting view.
+                     * 返回消息的状态
                      */
                     switch (n.state) {
+                        // 对epoch进行比较来执行对应的代码块，并将比较的结果广播出去，这里不会产生状态信息
                         case LOOKING:
                             if (getInitLastLoggedZxid() == -1) {
                                 LOG.debug("Ignoring notification as our zxid is -1");
@@ -1021,10 +1048,13 @@ public class FastLeaderElection implements Election {
                                 LOG.debug("Ignoring notification from member with -1 zxid {}", n.sid);
                                 break;
                             }
+                            // 先进行epoch比较
                             // If notification > current, replace and send messages out
                             if (n.electionEpoch > logicalclock.get()) {
                                 logicalclock.set(n.electionEpoch);
+                                //清空投票信息
                                 recvset.clear();
+                                //进行pk, 比出选票
                                 if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) {
                                     updateProposal(n.leader, n.zxid, n.peerEpoch);
                                 } else {
@@ -1055,6 +1085,7 @@ public class FastLeaderElection implements Election {
 
                             voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
 
+                            // 如果搜集齐了所有的投票，就可以选出Leader了
                             if (voteSet.hasAllQuorums()) {
 
                                 // Verify if there is any change in the proposed leader
@@ -1077,6 +1108,7 @@ public class FastLeaderElection implements Election {
                                 }
                             }
                             break;
+                            // 如果是观察者，直接忽略消息
                         case OBSERVING:
                             LOG.debug("Notification from observer: {}", n.sid);
                             break;

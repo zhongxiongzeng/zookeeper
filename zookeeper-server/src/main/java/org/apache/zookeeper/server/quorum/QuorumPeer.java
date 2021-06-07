@@ -1432,7 +1432,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     boolean shuttingDownLE = false;
 
     /**
-     * 不停的铜鼓getPeerState方法获取当前节点的状态， 然后执行对应的逻辑
+     * 不停的通过getPeerState方法获取当前节点的状态， 然后执行对应的逻辑
      *
      * 系统刚启动时serverState默认是LOOKING,表示需要进行leader选举，这时进入leader选举状态，会调用FastLeaderElection.lookForLeader方法，
      * lookerForLeader方法内部也包含了一个循环逻辑，直到选举出leader才会跳出lookerForLeader方法,如果选举出的Leader就是本节点，
