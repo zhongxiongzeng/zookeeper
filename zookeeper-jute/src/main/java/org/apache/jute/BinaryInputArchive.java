@@ -25,7 +25,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- *
+ * 这个类没啥特点，就是包装了一下而已
  */
 public class BinaryInputArchive implements InputArchive {
 
