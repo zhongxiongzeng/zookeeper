@@ -44,6 +44,10 @@ import org.slf4j.LoggerFactory;
  * submit proposals, but do not vote in their acceptance.
  *
  * See ZOOKEEPER-368 for a discussion of this feature.
+ *  * Zookeeper中主要存在三个端口
+ *  * 1、 客户端请求端口：对应配置中的clientPort, 默认是2181， 就是客户端连接ZK对其进行增删改查操作的端口
+ *  * 2、 集群选举端口：2999就是集群选举端口
+ *  * 3、 集群同步端口：Leader选举之后就会涉及到Leader和Learner之间的数据同步问题，集群同步端口的作用就是做这个使用的，
  */
 public class Observer extends Learner {
 

@@ -451,6 +451,11 @@ public class Leader extends LearnerMaster {
                     zk.getZooKeeperServerListener());
         }
 
+        /**
+         * 不停的循环accept接收Learner端的网络请求，Leader端接收到一个网络连接就会封装成一个LearnerHandler
+         * Leader类可以看成是一个总管，和每个learner服务器的交互任务都会被分派给LearnHandler这个助手完成，当Leader检测到一个任务被一半
+         * 以上的LearnerHandler处理完成，即认为该阶段结束，进入下一个阶段。
+         */
         @Override
         public void run() {
             if (!stop.get() && !serverSockets.isEmpty()) {
