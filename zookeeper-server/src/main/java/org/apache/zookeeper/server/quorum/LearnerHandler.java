@@ -62,6 +62,7 @@ import org.slf4j.LoggerFactory;
  * learner. All communication with a learner is handled by this
  * class.
  * 一个LearnerHandler与一个observer或者一个follower对应。
+ * 这个类加一个hashCode或者equals比较好
  */
 public class LearnerHandler extends ZooKeeperThread {
 
@@ -526,6 +527,7 @@ public class LearnerHandler extends ZooKeeperThread {
             //计算newEpoch
             /**
              * epoch的作用，
+             * 刚开始建立连接，计算epoch, 统一epoch
              */
             long newEpoch = learnerMaster.getEpochToPropose(this.getSid(), lastAcceptedEpoch);
             long newLeaderZxid = ZxidUtils.makeZxid(newEpoch, 0);
@@ -556,6 +558,7 @@ public class LearnerHandler extends ZooKeeperThread {
             }
             peerLastZxid = ss.getLastZxid();
 
+            // 下面是数据同步
             // Take any necessary action if we need to send TRUNC or DIFF
             // startForwarding() will be called in all cases
             boolean needSnap = syncFollower(peerLastZxid, learnerMaster);
@@ -656,7 +659,7 @@ public class LearnerHandler extends ZooKeeperThread {
             //
             LOG.debug("Sending UPTODATE message to {}", sid);
             queuedPackets.add(new QuorumPacket(Leader.UPTODATE, -1, null, null));
-
+            // 此后一直保持挂起状态，接受follower的讯息
             while (true) {
                 qp = new QuorumPacket();
                 ia.readRecord(qp, "packet");
@@ -697,10 +700,12 @@ public class LearnerHandler extends ZooKeeperThread {
                         learnerMaster.touch(sess, to);
                     }
                     break;
+                    //验证session是否激活
                 case Leader.REVALIDATE:
                     ServerMetrics.getMetrics().REVALIDATE_COUNT.add(1);
                     learnerMaster.revalidateSession(qp, this);
                     break;
+                    //处理突变操作
                 case Leader.REQUEST:
                     bb = ByteBuffer.wrap(qp.getData());
                     sessionId = bb.getLong();
