@@ -810,6 +810,14 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     /**
+     * 1. 首先系统刚刚启动时，servcerState默认是LOOKING，表示进行LEADER选举，这是进入LEDER选举状态中，会调用
+     * FastLeaderElection.lookforLeader方法，LookerForLeader方法内部也包含了一个循环逻辑， 直到选举出Leader才会跳出lookForLeader方法
+     * 如果选举出的leader就是本节点，则将serverState = LEADING赋值，否则设置成FOLLOWING或者OBSERVING
+     * 2. 然后QuorumPeer.run进行下一次循环，通过getPeerState获取当前ServerState状态，如果是LEADING，则表示当前节点当选为Leader，则进入Leader
+     * 角色分支流程，执行作为一个Leader该干的任务。若如果是FOLLOWING或OBSERVING, 则进入FOLLOW或者Observer角色，并执行其相应的任务。注意，进入
+     * 分支路程会一直阻塞在其分支中，直到角色转变才会重新进行下一次循环，比如Follower监控到无法与leader保持通信了，会将serverState赋值为LOOKING，
+     * 跳出分支并进行下一次循环，这是就会进入LOOKING分支中重新进行leader选举
+     *
      * @deprecated As of release 3.4.0, this class has been deprecated, since
      * it is used with one of the udp-based versions of leader election, which
      * we are also deprecating.
@@ -1144,7 +1152,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         //加载数据
         //涉及到的核心类是ZKDatabase, 并借助FileTxnSnapLog工具类将snap和transaction log反序列化到内存中，最终构建出内存数据DataTree
         loadDataBase();
-        //开启ServerCnxn工厂
+        //开启ServerCnxn工厂,客户端用
         startServerCnxnFactory();
         try {
             adminServer.start();
@@ -1152,7 +1160,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             LOG.warn("Problem starting AdminServer", e);
             System.out.println(e);
         }
-        //初始化leader选举工作
+        //初始化leader选举工作，也会开启Listener, follower和Observer用
         startLeaderElection();
 
         startJvmPauseMonitor();

@@ -520,7 +520,7 @@ public class FastLeaderElection implements Election {
              */
             void process(ToSend m) {
                 ByteBuffer requestBuffer = buildMsg(m.state.ordinal(), m.leader, m.zxid, m.electionEpoch, m.peerEpoch, m.configData);
-
+                //fixme 有个疑问，当服务刚刚启动的时候，怎么知道其他节点的sid ????
                 manager.toSend(m.sid, requestBuffer);
 
             }
@@ -554,8 +554,12 @@ public class FastLeaderElection implements Election {
          * Starts instances of WorkerSender and WorkerReceiver
          */
         void start() {
-            this.wsThread.start();
-            this.wrThread.start();
+            if (!wsThread.isAlive()) {
+                this.wsThread.start();
+            }
+            if (!wrThread.isAlive()) {
+                this.wrThread.start();
+            }
         }
 
         /**
@@ -659,10 +663,12 @@ public class FastLeaderElection implements Election {
 
     /**
      * This method starts the sender and receiver threads.
+     * // 这里加一个异常处理，WorkerSender和WorkerReceiver可能已经启动了
      */
     public void start() {
         this.messenger.start();
     }
+
 
     private void leaveInstance(Vote v) {
         LOG.debug(
@@ -920,17 +926,15 @@ public class FastLeaderElection implements Election {
      * sends notifications to all other peers.
      * 大致逻辑如下：
      * 1. 更新自己期望投票信息，即当前节点期望选用哪个服务器作为Leader(用sid代替期望服务器节点)以及该服务器zxid,epoch等信息。
-     *    第一次投票都默认自己当选Leader，然后调用sendNotifications方法广播该投票到集群中所有可以参与投票服务器。
+     * 第一次投票都默认自己当选Leader，然后调用sendNotifications方法广播该投票到集群中所有可以参与投票服务器。
      * 2. 只有对方发过来的投票electionEpoch和当前节点相等表示的是同一轮投票，即投票有效，然后调用totalOrderPredicate()对投票进行pk.
-     *    返回true代表对端胜出，则表示第一次投票是错误的（第一次都是投给自己），更新自己投票期望对端为Leader, 然后调用sendNotifications()
-     *    将自己最新的投票广播出去，返回false则表示自己胜出，第一次投票没有问题就不用管。
+     * 返回true代表对端胜出，则表示第一次投票是错误的（第一次都是投给自己），更新自己投票期望对端为Leader, 然后调用sendNotifications()
+     * 将自己最新的投票广播出去，返回false则表示自己胜出，第一次投票没有问题就不用管。
      * 3. 如果对端发过来的election对自己，则表明重置自己的electionEpoch,然后清空之前获取到的所有投票recvset,因为之前获取的投票轮次落后
-     *    于当前则代表之前的投票已经无效了，然后调用totalOrderPredicate()将当前期望的投票和对端投票进行pk,用胜出者更新当前投票期望，然后调用
-     *    sendNotifications()将自己期望的投票广播出去。注意：不管哪一方胜出，都需要广播出去，而不是步骤2中乙方胜出不需要广播，这是因为
-     *    electionEpoch落后导致之前发出的所有投票都是无效的，所以这里需要重新发送
+     * 于当前则代表之前的投票已经无效了，然后调用totalOrderPredicate()将当前期望的投票和对端投票进行pk,用胜出者更新当前投票期望，然后调用
+     * sendNotifications()将自己期望的投票广播出去。注意：不管哪一方胜出，都需要广播出去，而不是步骤2中乙方胜出不需要广播，这是因为
+     * electionEpoch落后导致之前发出的所有投票都是无效的，所以这里需要重新发送
      * 4. 如果对端发来的electionEpoch小于自己，则表示对方投票无效，直接忽略不处理
-     *
-     *
      */
     public Vote lookForLeader() throws InterruptedException {
         try {
@@ -1108,7 +1112,7 @@ public class FastLeaderElection implements Election {
                                 }
                             }
                             break;
-                            // 如果是观察者，直接忽略消息
+                        // 如果是观察者，直接忽略消息
                         case OBSERVING:
                             LOG.debug("Notification from observer: {}", n.sid);
                             break;

@@ -360,7 +360,7 @@ public class QuorumCnxManager {
     }
 
     /**
-     * Invokes initiateConnection for testing purposes
+     * Invokes initiateConnection for testing
      *
      * @param sid
      */

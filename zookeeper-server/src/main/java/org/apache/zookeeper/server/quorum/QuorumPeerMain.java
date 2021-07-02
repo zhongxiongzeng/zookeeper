@@ -136,6 +136,7 @@ public class QuorumPeerMain {
             config.getDataLogDir(),
             config.getSnapRetainCount(),
             config.getPurgeInterval());
+        //先清理日志和快照
         purgeMgr.start();
 
         if (args.length == 1 && config.isDistributed()) {
@@ -150,6 +151,7 @@ public class QuorumPeerMain {
     }
 
     public void runFromConfig(QuorumPeerConfig config) throws IOException, AdminServerException {
+        // register log4j mbeans
         try {
             ManagedUtil.registerLog4jMBeans();
         } catch (JMException e) {
