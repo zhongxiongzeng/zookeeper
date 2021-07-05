@@ -19,9 +19,16 @@
 package org.apache.zookeeper.server.quorum;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+
+import java.io.BufferedWriter;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.apache.jute.Record;
 import org.apache.zookeeper.server.ObserverBean;
 import org.apache.zookeeper.server.Request;
@@ -42,12 +49,12 @@ import org.slf4j.LoggerFactory;
  * therefore naturally act as a relay point for publishing the proposal stream
  * and can relieve Followers of some of the connection load. Observers may
  * submit proposals, but do not vote in their acceptance.
- *
+ * <p>
  * See ZOOKEEPER-368 for a discussion of this feature.
- *  * Zookeeper中主要存在三个端口
- *  * 1、 客户端请求端口：对应配置中的clientPort, 默认是2181， 就是客户端连接ZK对其进行增删改查操作的端口
- *  * 2、 集群选举端口：2999就是集群选举端口
- *  * 3、 集群同步端口：Leader选举之后就会涉及到Leader和Learner之间的数据同步问题，集群同步端口的作用就是做这个使用的，
+ * * Zookeeper中主要存在三个端口
+ * * 1、 客户端请求端口：对应配置中的clientPort, 默认是2181， 就是客户端连接ZK对其进行增删改查操作的端口
+ * * 2、 集群选举端口：2999就是集群选举端口
+ * * 3、 集群同步端口：Leader选举之后就会涉及到Leader和Learner之间的数据同步问题，集群同步端口的作用就是做这个使用的，
  */
 public class Observer extends Learner {
 
@@ -76,7 +83,7 @@ public class Observer extends Learner {
         reconnectDelayMs = Long.getLong(OBSERVER_RECONNECT_DELAY_MS, 0);
         LOG.info("{} = {}", OBSERVER_RECONNECT_DELAY_MS, reconnectDelayMs);
         observerElectionDelayMs = Long.getLong(OBSERVER_ELECTION_DELAY_MS, 200);
-        LOG.info("{} = {}", OBSERVER_ELECTION_DELAY_MS , observerElectionDelayMs);
+        LOG.info("{} = {}", OBSERVER_ELECTION_DELAY_MS, observerElectionDelayMs);
     }
 
     /**
@@ -101,6 +108,7 @@ public class Observer extends Learner {
 
     /**
      * the main method called by the observer to observe the leader
+     *
      * @throws Exception
      */
     void observeLeader() throws Exception {
@@ -142,10 +150,10 @@ public class Observer extends Learner {
                 long connectionDuration = System.currentTimeMillis() - connectTime;
 
                 LOG.info(
-                    "Disconnected from leader (with address: {}). Was connected for {}ms. Sync state: {}",
-                    leaderAddr,
-                    connectionDuration,
-                    completedSync);
+                        "Disconnected from leader (with address: {}). Was connected for {}ms. Sync state: {}",
+                        leaderAddr,
+                        connectionDuration,
+                        completedSync);
                 messageTracker.dumpToLog(leaderAddr.toString());
             }
         }
@@ -154,13 +162,13 @@ public class Observer extends Learner {
     private QuorumServer findLearnerMaster() {
         QuorumPeer.QuorumServer prescribedLearnerMaster = nextLearnerMaster.getAndSet(null);
         if (prescribedLearnerMaster != null
-            && self.validateLearnerMaster(Long.toString(prescribedLearnerMaster.id)) == null) {
+                && self.validateLearnerMaster(Long.toString(prescribedLearnerMaster.id)) == null) {
             LOG.warn("requested next learner master {} is no longer valid", prescribedLearnerMaster);
             prescribedLearnerMaster = null;
         }
         final QuorumPeer.QuorumServer master = (prescribedLearnerMaster == null)
-            ? self.findLearnerMaster(findLeader())
-            : prescribedLearnerMaster;
+                ? self.findLearnerMaster(findLeader())
+                : prescribedLearnerMaster;
         currentLearnerMaster = master;
         if (master == null) {
             LOG.warn("No learner master found");
@@ -172,6 +180,7 @@ public class Observer extends Learner {
 
     /**
      * Controls the response of an observer to the receipt of a quorumpacket
+     *
      * @param qp
      * @throws Exception
      */
@@ -181,64 +190,64 @@ public class Observer extends Learner {
         TxnDigest digest;
         Record txn;
         switch (qp.getType()) {
-        case Leader.PING:
-            ping(qp);
-            break;
-        case Leader.PROPOSAL:
-            LOG.warn("Ignoring proposal");
-            break;
-        case Leader.COMMIT:
-            LOG.warn("Ignoring commit");
-            break;
-        case Leader.UPTODATE:
-            LOG.error("Received an UPTODATE message after Observer started");
-            break;
-        case Leader.REVALIDATE:
-            revalidate(qp);
-            break;
-        case Leader.SYNC:
-            ((ObserverZooKeeperServer) zk).sync();
-            break;
-        case Leader.INFORM:
-            ServerMetrics.getMetrics().LEARNER_COMMIT_RECEIVED_COUNT.add(1);
-            logEntry = SerializeUtils.deserializeTxn(qp.getData());
-            hdr = logEntry.getHeader();
-            txn = logEntry.getTxn();
-            digest = logEntry.getDigest();
-            Request request = new Request(hdr.getClientId(), hdr.getCxid(), hdr.getType(), hdr, txn, 0);
-            request.logLatency(ServerMetrics.getMetrics().COMMIT_PROPAGATION_LATENCY);
-            request.setTxnDigest(digest);
-            ObserverZooKeeperServer obs = (ObserverZooKeeperServer) zk;
-            obs.commitRequest(request);
-            break;
-        case Leader.INFORMANDACTIVATE:
-            // get new designated leader from (current) leader's message
-            ByteBuffer buffer = ByteBuffer.wrap(qp.getData());
-            long suggestedLeaderId = buffer.getLong();
+            case Leader.PING:
+                ping(qp);
+                break;
+            case Leader.PROPOSAL:
+                LOG.warn("Ignoring proposal");
+                break;
+            case Leader.COMMIT:
+                LOG.warn("Ignoring commit");
+                break;
+            case Leader.UPTODATE:
+                LOG.error("Received an UPTODATE message after Observer started");
+                break;
+            case Leader.REVALIDATE:
+                revalidate(qp);
+                break;
+            case Leader.SYNC:
+                ((ObserverZooKeeperServer) zk).sync();
+                break;
+            case Leader.INFORM:
+                ServerMetrics.getMetrics().LEARNER_COMMIT_RECEIVED_COUNT.add(1);
+                logEntry = SerializeUtils.deserializeTxn(qp.getData());
+                hdr = logEntry.getHeader();
+                txn = logEntry.getTxn();
+                digest = logEntry.getDigest();
+                Request request = new Request(hdr.getClientId(), hdr.getCxid(), hdr.getType(), hdr, txn, 0);
+                request.logLatency(ServerMetrics.getMetrics().COMMIT_PROPAGATION_LATENCY);
+                request.setTxnDigest(digest);
+                ObserverZooKeeperServer obs = (ObserverZooKeeperServer) zk;
+                obs.commitRequest(request);
+                break;
+            case Leader.INFORMANDACTIVATE:
+                // get new designated leader from (current) leader's message
+                ByteBuffer buffer = ByteBuffer.wrap(qp.getData());
+                long suggestedLeaderId = buffer.getLong();
 
-            byte[] remainingdata = new byte[buffer.remaining()];
-            buffer.get(remainingdata);
-            logEntry = SerializeUtils.deserializeTxn(remainingdata);
-            hdr = logEntry.getHeader();
-            txn = logEntry.getTxn();
-            digest = logEntry.getDigest();
-            QuorumVerifier qv = self.configFromString(new String(((SetDataTxn) txn).getData(), UTF_8));
+                byte[] remainingdata = new byte[buffer.remaining()];
+                buffer.get(remainingdata);
+                logEntry = SerializeUtils.deserializeTxn(remainingdata);
+                hdr = logEntry.getHeader();
+                txn = logEntry.getTxn();
+                digest = logEntry.getDigest();
+                QuorumVerifier qv = self.configFromString(new String(((SetDataTxn) txn).getData(), UTF_8));
 
-            request = new Request(hdr.getClientId(), hdr.getCxid(), hdr.getType(), hdr, txn, 0);
-            request.setTxnDigest(digest);
-            obs = (ObserverZooKeeperServer) zk;
+                request = new Request(hdr.getClientId(), hdr.getCxid(), hdr.getType(), hdr, txn, 0);
+                request.setTxnDigest(digest);
+                obs = (ObserverZooKeeperServer) zk;
 
-            boolean majorChange = self.processReconfig(qv, suggestedLeaderId, qp.getZxid(), true);
+                boolean majorChange = self.processReconfig(qv, suggestedLeaderId, qp.getZxid(), true);
 
-            obs.commitRequest(request);
+                obs.commitRequest(request);
 
-            if (majorChange) {
-                throw new Exception("changes proposed in reconfig");
-            }
-            break;
-        default:
-            LOG.warn("Unknown packet type: {}", LearnerHandler.packetToString(qp));
-            break;
+                if (majorChange) {
+                    throw new Exception("changes proposed in reconfig");
+                }
+                break;
+            default:
+                LOG.warn("Unknown packet type: {}", LearnerHandler.packetToString(qp));
+                break;
         }
     }
 

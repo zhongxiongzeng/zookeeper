@@ -615,6 +615,7 @@ public class LearnerHandler extends ZooKeeperThread {
             bufferedOutput.flush();
 
             // Start thread that blast packets in the queue to learner
+            // 这里的作用是启动一个新的线程，将队列里面的消息不断往对方节点发送
             startSendingPackets();
 
             /*
@@ -689,7 +690,8 @@ public class LearnerHandler extends ZooKeeperThread {
                     syncLimitCheck.updateAck(qp.getZxid());
                     learnerMaster.processAck(this.sid, qp.getZxid(), sock.getLocalSocketAddress());
                     break;
-                    //Ping是单向的
+                    //这里的PING是follow或者observer往LeaderPing
+                    //Leader PING follow和observer的逻辑不在这
                 case Leader.PING:
                     // Process the touches
                     ByteArrayInputStream bis = new ByteArrayInputStream(qp.getData());

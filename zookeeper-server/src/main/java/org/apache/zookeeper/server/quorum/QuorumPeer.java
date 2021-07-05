@@ -818,6 +818,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
      * 分支路程会一直阻塞在其分支中，直到角色转变才会重新进行下一次循环，比如Follower监控到无法与leader保持通信了，会将serverState赋值为LOOKING，
      * 跳出分支并进行下一次循环，这是就会进入LOOKING分支中重新进行leader选举
      *
+     *
      * @deprecated As of release 3.4.0, this class has been deprecated, since
      * it is used with one of the udp-based versions of leader election, which
      * we are also deprecating.
