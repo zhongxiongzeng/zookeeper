@@ -41,6 +41,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 这个处理器主要是用于处理提议的
+ *
+ * 对于queuedRequests中客户端的查询request，直接返回本地数据；
+ * 对于客户端提交的或follower转发来的写请求，作为一个pendingRequest等待相应的表决结果返回committedRequest到committedRequests队列。
+ * 对于队列中到来的每一个committedRequest,如果当前有pendingRequest等待，并且其sessionId，zxid和这个请求匹配，则处理pendingRequest（如果原始请求发自客户端，pendingRequest会携带客户端连接对象，从而能够发送响应给客户端），否则直接处理committedRequest（这种情况对应Follower中的CommitProcessor直接接收到了commit消息）
+ * 处理的过程是记录committedLog，变更本地数据。如果请求从客户端来，发送响应给客户端。
+ * 那么如果一个pendingRequest始终等不到对应的committedRequest到来呢？答案是会一直等待，从而会阻止之后所有queuedRequest请求的处理！开始看到这里以为是个bug，后来想想，如果发生这种情况，已经说明Zookeeper的voter节点超过半数Fault了（不管是消息丢失还是宕机）。
+ * 这时整个Zookeeper服务只能是不可用了。否则只要过半的voter节点可用，一定会有相应的committedRequest返回。同时这里也保证了写请求按到达顺序生效。
+ *
+ *
  * This RequestProcessor matches the incoming committed requests with the
  * locally submitted requests. The trick is that locally submitted requests that
  * change the state of the system will come back as incoming committed requests,
@@ -89,6 +99,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
 
     /**
      * Incoming requests.
+     * queuedRequests保存PrepRequestProcessor线程下发的submittedRequest消息。
      */
     protected LinkedBlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<Request>();
 
@@ -110,6 +121,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
 
     /**
      * Requests that have been committed.
+     * committedRequests保存Proposal（提议）通过后，LearnerHanlder线程发来的提交请求。
      */
     protected final LinkedBlockingQueue<Request> committedRequests = new LinkedBlockingQueue<Request>();
 
@@ -250,6 +262,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
                        && (request = queuedRequests.poll()) != null) {
                     requestsToProcess--;
                     if (needCommit(request) || pendingRequests.containsKey(request.sessionId)) {
+                        // 如果需要投票，就让该消息pending
                         // Add request to pending
                         Deque<Request> requests = pendingRequests.computeIfAbsent(request.sessionId, sid -> new ArrayDeque<>());
                         requests.addLast(request);

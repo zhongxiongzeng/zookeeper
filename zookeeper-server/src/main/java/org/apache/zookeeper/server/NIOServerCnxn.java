@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
  * This class handles communication with clients using NIO. There is one per
  * client, but only one thread doing the communication.
  */
+
 public class NIOServerCnxn extends ServerCnxn {
 
     private static final Logger LOG = LoggerFactory.getLogger(NIOServerCnxn.class);

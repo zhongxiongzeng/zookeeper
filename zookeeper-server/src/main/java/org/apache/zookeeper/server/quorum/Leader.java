@@ -580,6 +580,7 @@ public class Leader extends LearnerMaster {
         return 0;
     }
 
+
     /**
      * This method is main function that is called to lead
      * * 1. 启动LearnerCnxAcceptor线程
@@ -743,6 +744,8 @@ public class Leader extends LearnerMaster {
                         wait(end - cur);
                         cur = Time.currentElapsedTime();
                     }
+
+                    wait(self.tickTime / 2);
 
                     if (!tickSkip) {
                         self.tick.incrementAndGet();

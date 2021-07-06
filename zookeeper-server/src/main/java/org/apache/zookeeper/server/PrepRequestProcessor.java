@@ -85,6 +85,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 这个请求处理器用于开启一段事务
+ * 开始实施一致性算法。submittedRequests有两个来源，一是接入的客户端直接提交，提交的请求既包括写请求，也包括一些查询请求；
+ * 另一个是由Follower转发，转发内容只包括写请求和同步请求。PrepRequestProcessor收到submittedRequest后，
+ * 将请求转发给CommitProcessor线程和SyncRequestProcessor线程的输入队列；对于其中的写请求，
+ * 向所有follower发送PROPOSAL消息（异步发送）。
+ *
  * This request processor is generally at the start of a RequestProcessor
  * change. It sets up any transactions associated with requests that change the
  * state of the system. It counts on ZooKeeperServer to update
